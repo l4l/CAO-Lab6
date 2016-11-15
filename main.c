@@ -115,6 +115,20 @@ int get_next_free_frame(int nframes) {
 	return UNKNOWN;
 }
 
+int find_clean_frame() {
+	if (!tail) return UNKNOWN;
+
+	struct frame_info *node = tail;
+	while (node) {
+		if (!(node->bits & PROT_WRITE)) {
+			return node - frame_info;
+		}
+		node = node->prev;
+	}
+
+	return UNKNOWN;
+}
+
 
 void page_fault_handler(struct page_table *pt, int page) {
 	++state.page_faults;
@@ -147,7 +161,16 @@ void page_fault_handler(struct page_table *pt, int page) {
 				}
 				break;
 			case TYPE_CUSTOM:
-				die("Not implemented");
+				if ((old_frame = find_clean_frame()) == UNKNOWN) {
+					old_frame = list_pop();
+				}
+
+				if (old_frame == UNKNOWN) {
+				#ifdef DEBUG
+					// puts("Attempt to pop from empty list");
+				#endif
+					return;
+				}
 				break;
 			default:
 				die("Unknown handler type"); // should be actually procecuted earlier
@@ -171,6 +194,7 @@ void page_fault_handler(struct page_table *pt, int page) {
 
 	switch (state.type) {
 		case TYPE_FIFO:
+		case TYPE_CUSTOM:
 			list_push_back(old_frame);
 			break;
 	}
