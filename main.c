@@ -40,8 +40,7 @@ struct frame_info *head = NULL;
 struct frame_info *tail = NULL;
 
 struct frame_info {
-	int is_free : 1;
-	int dirty : 1;
+	int non_free : 1;
 	int cached : 1;
 	int bits : 4; // 2 bits actually should be enough for r/w
 
@@ -108,7 +107,7 @@ int get_next_free_frame(int nframes) {
 	if (state.free_pages >= nframes) return UNKNOWN;
 
 	for (int i = 0; i < nframes; ++i) {
-		if (frame_info[i].is_free == 0) {
+		if (frame_info[i].non_free == 0) {
 			++state.free_pages;
 			return i;
 		}
@@ -128,19 +127,19 @@ void page_fault_handler(struct page_table *pt, int page) {
 	int frame, bit;
 	page_table_get_entry(pt, page, &frame, &bit);
 
-	int new_frame = UNKNOWN;
+	int old_frame = UNKNOWN;
 	if (!bit) { // read page fault
 		bit |= PROT_READ;
-		if ((new_frame = get_next_free_frame(page_table_get_nframes(pt))) == UNKNOWN) {
+		if ((old_frame = get_next_free_frame(page_table_get_nframes(pt))) == UNKNOWN) {
 			
 			switch (state.type) {
 			case TYPE_RAND:
-				new_frame = random() % page_table_get_nframes(pt);
+				old_frame = random() % page_table_get_nframes(pt);
 				break;
 			case TYPE_FIFO:
-				new_frame = list_pop();
+				old_frame = list_pop();
 
-				if (new_frame == UNKNOWN) {
+				if (old_frame == UNKNOWN) {
 				#ifdef DEBUG
 					puts("Attempt to pop from empty list");
 				#endif
@@ -153,26 +152,26 @@ void page_fault_handler(struct page_table *pt, int page) {
 			default:
 				die("Unknown handler type"); // should be actually procecuted earlier
 			}
-			flush_page(pt, new_frame);
+			flush_page(pt, old_frame);
 		}
 
 		disk_read(disk, page, GET_PAGE_PHYS_ADDR(pt, frame));
 		++state.disk_reads;
 	} else if (bit ^ PROT_WRITE) { // write page fault
 		bit |= PROT_WRITE;
-		new_frame = frame;
+		old_frame = frame;
 	} else {
 		die("Wrong protection bits");
 	}
 
-	page_table_set_entry(pt, page, new_frame, bit);
-	frame_info[new_frame].page_num = page;
-	frame_info[new_frame].bits = bit;
-	frame_info[new_frame].is_free = 1;
+	page_table_set_entry(pt, page, old_frame, bit);
+	frame_info[old_frame].page_num = page;
+	frame_info[old_frame].bits = bit;
+	frame_info[old_frame].non_free = 1;
 
 	switch (state.type) {
 		case TYPE_FIFO:
-			list_push_back(new_frame);
+			list_push_back(old_frame);
 			break;
 	}
 }
