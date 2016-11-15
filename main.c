@@ -78,7 +78,7 @@ void list_push_back(int frame) {
 
 int list_pop() {
 	int frame = UNKNOWN;
-	if (head == tail) { // 1 element in list
+	if (head && head == tail) { // 1 element in list
 		frame = HEAD_INDEX;
 		head->cached = 0;
 		head = tail = NULL;
